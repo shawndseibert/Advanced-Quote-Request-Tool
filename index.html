@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Quote Request Tool</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Quote Request Builder</h1>
+            <p class="subtitle">Build custom quote requests with drag-and-drop modules</p>
+        </header>
+
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <button type="button" id="customModulesBtn" class="btn btn-secondary">
+                    <span class="icon">⭐</span> My Modules
+                </button>
+                <button type="button" id="presetsBtn" class="btn btn-secondary">
+                    <span class="icon">📋</span> Load Preset
+                </button>
+                <button type="button" id="savePresetBtn" class="btn btn-secondary">
+                    <span class="icon">💾</span> Save as Preset
+                </button>
+            </div>
+            <div class="toolbar-right">
+                <button type="button" id="generateBtn" class="btn btn-accent">
+                    <span class="icon">✨</span> Generate Quote
+                </button>
+                <button type="button" id="clearAllBtn" class="btn btn-danger">
+                    <span class="icon">🗑️</span> Clear All
+                </button>
+            </div>
+        </div>
+
+        <!-- Modules Container -->
+        <div id="modulesContainer" class="modules-container">
+            <!-- Modules will be added here dynamically -->
+            <div class="empty-state">
+                <div class="empty-icon">📦</div>
+                <h3>No modules yet</h3>
+                <p>Click "Add Module" to start building your quote request</p>
+                <p class="tip">💡 Tip: Try loading a preset to get started quickly!</p>
+            </div>
+        </div>
+
+        <!-- Output Section -->
+        <section id="outputSection" class="output-section hidden">
+            <div class="output-header">
+                <h2>Generated Quote Request</h2>
+                <div class="output-actions">
+                    <button type="button" id="copyBtn" class="btn btn-copy">
+                        <span class="icon">📋</span> Copy
+                    </button>
+                    <button type="button" id="downloadBtn" class="btn btn-secondary">
+                        <span class="icon">⬇️</span> Download
+                    </button>
+                </div>
+            </div>
+            <div id="quoteOutput" class="quote-output"></div>
+            <div id="copyNotification" class="copy-notification hidden">Copied to clipboard!</div>
+        </section>
+
+    </div>
+
+    <!-- Modal for Adding Modules -->
+    <div id="moduleModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Module</h2>
+                <button class="modal-close" id="modalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="module-grid">
+                    <div class="module-card" data-module="text">
+                        <div class="module-icon">📝</div>
+                        <h3>Text Field</h3>
+                        <p>Single line input</p>
+                    </div>
+                    <div class="module-card" data-module="textarea">
+                        <div class="module-icon">📄</div>
+                        <h3>Text Area</h3>
+                        <p>Multi-line input</p>
+                    </div>
+                    <div class="module-card" data-module="select">
+                        <div class="module-icon">📋</div>
+                        <h3>Dropdown</h3>
+                        <p>Select from options</p>
+                    </div>
+                    <div class="module-card" data-module="radio">
+                        <div class="module-icon">🔘</div>
+                        <h3>Radio Buttons</h3>
+                        <p>Single choice</p>
+                    </div>
+                    <div class="module-card" data-module="checkbox">
+                        <div class="module-icon">☑️</div>
+                        <h3>Checkboxes</h3>
+                        <p>Multiple choices</p>
+                    </div>
+                    <div class="module-card" data-module="dimension">
+                        <div class="module-icon">📏</div>
+                        <h3>Dimensions</h3>
+                        <p>Width, height, depth</p>
+                    </div>
+                    <div class="module-card" data-module="contact">
+                        <div class="module-icon">👤</div>
+                        <h3>Contact Info</h3>
+                        <p>Name, email, phone</p>
+                    </div>
+                    <div class="module-card" data-module="heading">
+                        <div class="module-icon">📌</div>
+                        <h3>Heading</h3>
+                        <p>Section title</p>
+                    </div>
+                    <div class="module-card" data-module="title">
+                        <div class="module-icon">🏷️</div>
+                        <h3>Title</h3>
+                        <p>Document title/header</p>
+                    </div>
+                    <div class="module-card" data-module="footer">
+                        <div class="module-icon">📄</div>
+                        <h3>Footer</h3>
+                        <p>Closing message</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Presets -->
+    <div id="presetModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Load Preset</h2>
+                <button class="modal-close" id="presetModalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="preset-grid" id="presetGrid">
+                    <!-- Presets will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Save Preset -->
+    <div id="savePresetModal" class="modal hidden">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Save Preset</h2>
+                <button class="modal-close" id="savePresetModalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="presetName">Preset Name</label>
+                    <input type="text" id="presetName" class="text-input" placeholder="e.g., Standard Door Quote">
+                </div>
+                <div class="form-group">
+                    <label for="presetDescription">Description (optional)</label>
+                    <textarea id="presetDescription" class="textarea-input" rows="3" placeholder="Describe when to use this preset..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="presetTags">Tags (comma-separated)</label>
+                    <input type="text" id="presetTags" class="text-input" placeholder="e.g., door, interior, custom">
+                    <small class="form-hint">Add tags to organize and filter your presets</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancelPresetBtn" class="btn btn-secondary">Cancel</button>
+                    <button type="button" id="confirmSavePresetBtn" class="btn btn-primary">Save Preset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Custom Modules Library -->
+    <div id="customModulesModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>My Custom Modules</h2>
+                <button class="modal-close" id="customModulesModalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="search-bar">
+                    <input type="text" id="customModuleSearch" class="text-input" placeholder="Search by name or tag...">
+                </div>
+                <div class="custom-module-grid" id="customModuleGrid">
+                    <!-- Custom modules will be loaded here -->
+                    <div class="empty-state-small">
+                        <p>No custom modules saved yet</p>
+                        <p class="tip">💡 Right-click any module and select "Save as Custom" to add it here</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Save Custom Module -->
+    <div id="saveCustomModuleModal" class="modal hidden">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Save Custom Module</h2>
+                <button class="modal-close" id="saveCustomModuleModalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="customModuleName">Module Name</label>
+                    <input type="text" id="customModuleName" class="text-input" placeholder="e.g., My Custom Field">
+                </div>
+                <div class="form-group">
+                    <label for="customModuleTags">Tags (comma-separated)</label>
+                    <input type="text" id="customModuleTags" class="text-input" placeholder="e.g., door, window, special">
+                    <small class="form-hint">Add tags to organize and filter your modules</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancelCustomModuleBtn" class="btn btn-secondary">Cancel</button>
+                    <button type="button" id="confirmSaveCustomModuleBtn" class="btn btn-primary">Save Module</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Editing Options -->
+    <div id="editOptionsModal" class="modal hidden">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Edit Options</h2>
+                <button class="modal-close" id="editOptionsModalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Options</label>
+                    <div id="optionsList" class="options-list">
+                        <!-- Options will be added here -->
+                    </div>
+                    <button type="button" id="addOptionBtn" class="btn btn-secondary" style="margin-top: 10px; width: 100%;">
+                        <span class="icon">+</span> Add Option
+                    </button>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancelOptionsBtn" class="btn btn-secondary">Cancel</button>
+                    <button type="button" id="saveOptionsBtn" class="btn btn-primary">Save Options</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
