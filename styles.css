@@ -299,6 +299,7 @@ header h1 {
     animation: slideIn 0.3s ease;
     cursor: grab;
     will-change: transform;
+    touch-action: none;
 }
 
 .module-bubble.module-required {

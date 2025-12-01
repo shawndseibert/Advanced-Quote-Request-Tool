@@ -944,6 +944,11 @@ let touchDragActive = false;
 let touchStartX = 0;
 let touchStartY = 0;
 let touchMoved = false;
+let lastTouchMoveTime = 0;
+let animationFrameId = null;
+let currentTouchX = 0;
+let currentTouchY = 0;
+let dragStartTime = 0;
 
 function handleTouchStart(e) {
     const target = e.target;
@@ -982,62 +987,83 @@ function handleTouchMove(e) {
     if (!draggedElement) return;
     
     const touch = e.touches[0];
+    currentTouchX = touch.clientX;
+    currentTouchY = touch.clientY;
+    
     const moveX = Math.abs(touch.clientX - touchStartX);
     const moveY = Math.abs(touch.clientY - touchStartY);
     
     // Only start dragging if moved more than 10px (prevents accidental drags)
     if (!touchDragActive && (moveX > 10 || moveY > 10)) {
-        // Check if it's been at least 200ms since touch start (helps distinguish drag from scroll)
-        const touchDuration = Date.now() - (draggedElement.touchStartTime || 0);
-        
         touchDragActive = true;
         touchMoved = true;
+        dragStartTime = Date.now();
         
-        // Prevent scrolling once drag is active
-        e.preventDefault();
-        
-        // Create clone
+        // Create clone immediately without waiting
         dragClone = draggedElement.cloneNode(true);
         dragClone.id = 'drag-clone';
         dragClone.style.position = 'fixed';
+        dragClone.style.left = (touch.clientX - dragOffsetX) + 'px';
+        dragClone.style.top = (touch.clientY - dragOffsetY) + 'px';
         dragClone.style.pointerEvents = 'none';
         dragClone.style.zIndex = '10000';
         dragClone.style.opacity = '0.95';
         dragClone.style.width = draggedElement.offsetWidth + 'px';
         dragClone.style.transition = 'none';
-        dragClone.style.left = (touch.clientX - dragOffsetX) + 'px';
-        dragClone.style.top = (touch.clientY - dragOffsetY) + 'px';
         document.body.appendChild(dragClone);
         
         draggedElement.classList.add('dragging');
         
         // Prevent body scroll while dragging
         document.body.style.overflow = 'hidden';
+        document.body.style.touchAction = 'none';
+        
+        // Start the animation loop
+        updateDragPosition();
     }
     
+    // Always prevent default when actively dragging to stop scroll
     if (touchDragActive) {
         e.preventDefault();
-        
-        // Update clone position
-        if (dragClone) {
-            dragClone.style.left = (touch.clientX - dragOffsetX) + 'px';
-            dragClone.style.top = (touch.clientY - dragOffsetY) + 'px';
+    }
+}
+
+function updateDragPosition() {
+    if (!touchDragActive || !dragClone) return;
+    
+    // Update clone position
+    dragClone.style.left = (currentTouchX - dragOffsetX) + 'px';
+    dragClone.style.top = (currentTouchY - dragOffsetY) + 'px';
+    
+    // Wait 300ms after drag starts before enabling swap detection
+    const timeSinceDragStart = Date.now() - dragStartTime;
+    if (timeSinceDragStart < 300) {
+        // Continue the animation loop without swap detection
+        if (touchDragActive) {
+            animationFrameId = requestAnimationFrame(updateDragPosition);
         }
+        return;
+    }
+    
+    // Throttle expensive operations (element detection, swapping) - only every 200ms
+    const now = Date.now();
+    if (now - lastTouchMoveTime >= 200) {
+        lastTouchMoveTime = now;
         
         // Find element under touch
-        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+        const elementBelow = document.elementFromPoint(currentTouchX, currentTouchY);
         const targetBubble = elementBelow?.closest('.module-bubble');
         
-        // Remove drag-over from all
-        document.querySelectorAll('.module-bubble').forEach(bubble => {
-            bubble.classList.remove('drag-over');
-        });
-        
-        if (targetBubble && targetBubble !== draggedElement) {
-            targetBubble.classList.add('drag-over');
-            
-            // Perform swap if different from last
-            if (lastDragOverElement !== targetBubble && !swapInProgress) {
+        if (targetBubble && targetBubble !== draggedElement && !swapInProgress) {
+            // Only update drag-over for new target
+            if (lastDragOverElement !== targetBubble) {
+                // Remove drag-over from all
+                document.querySelectorAll('.module-bubble').forEach(bubble => {
+                    bubble.classList.remove('drag-over');
+                });
+                targetBubble.classList.add('drag-over');
+                
+                // Perform swap
                 swapInProgress = true;
                 lastDragOverElement = targetBubble;
                 
@@ -1050,7 +1076,7 @@ function handleTouchMove(e) {
                     const [draggedModule] = modules.splice(draggedIndex, 1);
                     modules.splice(targetIndex, 0, draggedModule);
                     
-                    // Update DOM
+                    // Update DOM efficiently
                     const container = document.getElementById('modulesContainer');
                     const allBubbles = Array.from(container.querySelectorAll('.module-bubble'));
                     const draggedDOMIndex = allBubbles.indexOf(draggedElement);
@@ -1062,15 +1088,19 @@ function handleTouchMove(e) {
                         targetBubble.parentNode.insertBefore(draggedElement, targetBubble);
                     }
                     
-                    lastDragOverElement = null;
                     saveState();
                 }
                 
                 setTimeout(() => {
                     swapInProgress = false;
-                }, 150);
+                }, 200);
             }
         }
+    }
+    
+    // Continue the animation loop
+    if (touchDragActive) {
+        animationFrameId = requestAnimationFrame(updateDragPosition);
     }
 }
 
@@ -1081,8 +1111,15 @@ function handleTouchEnd(e) {
         e.preventDefault();
     }
     
+    // Cancel animation loop
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+    
     // Re-enable body scroll
     document.body.style.overflow = '';
+    document.body.style.touchAction = '';
     
     draggedElement.classList.remove('dragging');
     
@@ -1102,6 +1139,7 @@ function handleTouchEnd(e) {
     lastDragOverElement = null;
     touchDragActive = false;
     swapInProgress = false;
+    lastTouchMoveTime = 0;
 }
 
 function updateDragPreview(targetElement) {
