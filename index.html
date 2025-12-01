@@ -10,28 +10,31 @@
     <div class="container">
         <header>
             <h1>Quote Request Builder</h1>
-            <p class="subtitle">Build custom quote requests with drag-and-drop modules</p>
+            <p class="subtitle">Professional quote request management system</p>
         </header>
 
         <!-- Toolbar -->
         <div class="toolbar">
             <div class="toolbar-left">
                 <button type="button" id="customModulesBtn" class="btn btn-secondary">
-                    <span class="icon">⭐</span> My Modules
+                    <span class="icon">★</span> My Modules
                 </button>
                 <button type="button" id="presetsBtn" class="btn btn-secondary">
-                    <span class="icon">📋</span> Load Preset
+                    <span class="icon">☰</span> Load Preset
                 </button>
                 <button type="button" id="savePresetBtn" class="btn btn-secondary">
-                    <span class="icon">💾</span> Save as Preset
+                    <span class="icon">▼</span> Save as Preset
                 </button>
             </div>
             <div class="toolbar-right">
-                <button type="button" id="generateBtn" class="btn btn-accent">
-                    <span class="icon">✨</span> Generate Quote
+                <button type="button" id="undoBtn" class="btn btn-secondary" disabled>
+                    <span class="icon">↺</span> Undo
+                </button>
+                <button type="button" id="redoBtn" class="btn btn-secondary" disabled>
+                    <span class="icon">↻</span> Redo
                 </button>
                 <button type="button" id="clearAllBtn" class="btn btn-danger">
-                    <span class="icon">🗑️</span> Clear All
+                    <span class="icon">×</span> Clear All
                 </button>
             </div>
         </div>
@@ -40,10 +43,10 @@
         <div id="modulesContainer" class="modules-container">
             <!-- Modules will be added here dynamically -->
             <div class="empty-state">
-                <div class="empty-icon">📦</div>
-                <h3>No modules yet</h3>
-                <p>Click "Add Module" to start building your quote request</p>
-                <p class="tip">💡 Tip: Try loading a preset to get started quickly!</p>
+                <div class="empty-icon">□</div>
+                <h3>No Modules Added</h3>
+                <p>Select "Add Module" to begin creating your quote request</p>
+                <p class="tip">Tip: Load a preset template for faster setup</p>
             </div>
         </div>
 
@@ -53,10 +56,10 @@
                 <h2>Generated Quote Request</h2>
                 <div class="output-actions">
                     <button type="button" id="copyBtn" class="btn btn-copy">
-                        <span class="icon">📋</span> Copy
+                        <span class="icon">□</span> Copy to Clipboard
                     </button>
                     <button type="button" id="downloadBtn" class="btn btn-secondary">
-                        <span class="icon">⬇️</span> Download
+                        <span class="icon">↓</span> Download
                     </button>
                 </div>
             </div>
@@ -75,55 +78,89 @@
             </div>
             <div class="modal-body">
                 <div class="module-grid">
-                    <div class="module-card" data-module="text">
-                        <div class="module-icon">📝</div>
-                        <h3>Text Field</h3>
-                        <p>Single line input</p>
-                    </div>
-                    <div class="module-card" data-module="textarea">
-                        <div class="module-icon">📄</div>
-                        <h3>Text Area</h3>
-                        <p>Multi-line input</p>
-                    </div>
-                    <div class="module-card" data-module="select">
-                        <div class="module-icon">📋</div>
-                        <h3>Dropdown</h3>
-                        <p>Select from options</p>
-                    </div>
-                    <div class="module-card" data-module="radio">
-                        <div class="module-icon">🔘</div>
-                        <h3>Radio Buttons</h3>
-                        <p>Single choice</p>
-                    </div>
-                    <div class="module-card" data-module="checkbox">
-                        <div class="module-icon">☑️</div>
-                        <h3>Checkboxes</h3>
-                        <p>Multiple choices</p>
-                    </div>
-                    <div class="module-card" data-module="dimension">
-                        <div class="module-icon">📏</div>
-                        <h3>Dimensions</h3>
-                        <p>Width, height, depth</p>
-                    </div>
-                    <div class="module-card" data-module="contact">
-                        <div class="module-icon">👤</div>
-                        <h3>Contact Info</h3>
-                        <p>Name, email, phone</p>
-                    </div>
                     <div class="module-card" data-module="heading">
-                        <div class="module-icon">📌</div>
-                        <h3>Heading</h3>
-                        <p>Section title</p>
+                        <div class="module-icon">H</div>
+                        <div class="module-card-content">
+                            <h3>Heading</h3>
+                            <p>Section title</p>
+                        </div>
                     </div>
                     <div class="module-card" data-module="title">
-                        <div class="module-icon">🏷️</div>
-                        <h3>Title</h3>
-                        <p>Document title/header</p>
+                        <div class="module-icon">■</div>
+                        <div class="module-card-content">
+                            <h3>Title</h3>
+                            <p>Document header</p>
+                        </div>
+                    </div>
+                    <div class="module-card" data-module="checkbox">
+                        <div class="module-icon">☑</div>
+                        <div class="module-card-content">
+                            <h3>Checkboxes</h3>
+                            <p>Multiple selections</p>
+                        </div>
+                    </div>
+                    <div class="module-card" data-module="contact">
+                        <div class="module-icon">@</div>
+                        <div class="module-card-content">
+                            <h3>Contact Info</h3>
+                            <p>Name, email, phone</p>
+                        </div>
+                    </div>
+                    <div class="module-card" data-module="door-dimension">
+                        <div class="module-icon">🚪</div>
+                        <div class="module-card-content">
+                            <h3>Door Dimensions</h3>
+                            <p>Standard door sizes</p>
+                        </div>
+                    </div>
+                    <div class="module-card" data-module="window-dimension">
+                        <div class="module-icon">🪟</div>
+                        <div class="module-card-content">
+                            <h3>Window Dimensions</h3>
+                            <p>Standard window sizes</p>
+                        </div>
+                    </div>
+                    <div class="module-card" data-module="dimension">
+                        <div class="module-icon">⊞</div>
+                        <div class="module-card-content">
+                            <h3>Custom Dimensions</h3>
+                            <p>Width, height, depth</p>
+                        </div>
+                    </div>
+                    <div class="module-card" data-module="select">
+                        <div class="module-icon">▼</div>
+                        <div class="module-card-content">
+                            <h3>Dropdown</h3>
+                            <p>Select from options</p>
+                        </div>
+                    </div>
+                    <div class="module-card" data-module="radio">
+                        <div class="module-icon">◉</div>
+                        <div class="module-card-content">
+                            <h3>Radio Buttons</h3>
+                            <p>Single selection</p>
+                        </div>
+                    </div>
+                    <div class="module-card" data-module="text">
+                        <div class="module-icon">T</div>
+                        <div class="module-card-content">
+                            <h3>Text Field</h3>
+                            <p>Single line input</p>
+                        </div>
+                    </div>
+                    <div class="module-card" data-module="textarea">
+                        <div class="module-icon">¶</div>
+                        <div class="module-card-content">
+                            <h3>Text Area</h3>
+                            <p>Multi-line input</p>
+                        </div>
                     </div>
                     <div class="module-card" data-module="footer">
-                        <div class="module-icon">📄</div>
-                        <h3>Footer</h3>
-                        <p>Closing message</p>
+                        <div class="module-icon">—</div>
+                        <div class="module-card-content">
+                            <h3>Footer</h3>
+                            <p>Document footer</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -138,6 +175,10 @@
                 <button class="modal-close" id="presetModalCloseBtn">&times;</button>
             </div>
             <div class="modal-body">
+                <div class="search-bar">
+                    <input type="text" id="presetSearch" class="text-input" placeholder="Search presets by name or tag...">
+                </div>
+                <div id="presetTags" class="tag-container" style="margin-bottom: 15px;"></div>
                 <div class="preset-grid" id="presetGrid">
                     <!-- Presets will be loaded here -->
                 </div>
@@ -185,11 +226,12 @@
                 <div class="search-bar">
                     <input type="text" id="customModuleSearch" class="text-input" placeholder="Search by name or tag...">
                 </div>
+                <div id="customModuleTags" class="tag-container" style="margin-bottom: 15px;"></div>
                 <div class="custom-module-grid" id="customModuleGrid">
                     <!-- Custom modules will be loaded here -->
                     <div class="empty-state-small">
-                        <p>No custom modules saved yet</p>
-                        <p class="tip">💡 Right-click any module and select "Save as Custom" to add it here</p>
+                        <p>No custom modules saved</p>
+                        <p class="tip">Right-click any module and select "Save as Custom" to add it here</p>
                     </div>
                 </div>
             </div>
@@ -241,6 +283,43 @@
                 <div class="modal-actions">
                     <button type="button" id="cancelOptionsBtn" class="btn btn-secondary">Cancel</button>
                     <button type="button" id="saveOptionsBtn" class="btn btn-primary">Save Options</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Editing Dimension Presets -->
+    <div id="editDimensionPresetsModal" class="modal hidden">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Edit Dimension Presets</h2>
+                <button class="modal-close" id="editDimensionPresetsModalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Width Presets</label>
+                    <div id="widthPresetsList" class="options-list"></div>
+                    <button type="button" id="addWidthPresetBtn" class="btn btn-secondary" style="margin-top: 10px; width: 100%;">
+                        <span class="icon">+</span> Add Width Preset
+                    </button>
+                </div>
+                <div class="form-group">
+                    <label>Height Presets</label>
+                    <div id="heightPresetsList" class="options-list"></div>
+                    <button type="button" id="addHeightPresetBtn" class="btn btn-secondary" style="margin-top: 10px; width: 100%;">
+                        <span class="icon">+</span> Add Height Preset
+                    </button>
+                </div>
+                <div class="form-group">
+                    <label>Depth/Thickness Presets</label>
+                    <div id="depthPresetsList" class="options-list"></div>
+                    <button type="button" id="addDepthPresetBtn" class="btn btn-secondary" style="margin-top: 10px; width: 100%;">
+                        <span class="icon">+</span> Add Depth Preset
+                    </button>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancelDimensionPresetsBtn" class="btn btn-secondary">Cancel</button>
+                    <button type="button" id="saveDimensionPresetsBtn" class="btn btn-primary">Save Presets</button>
                 </div>
             </div>
         </div>

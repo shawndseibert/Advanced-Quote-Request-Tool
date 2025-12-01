@@ -7,6 +7,11 @@ let currentModuleToSave = null;
 let customModules = [];
 let customPresets = [];
 
+// Undo/Redo History
+let history = [];
+let historyIndex = -1;
+let isUndoRedoAction = false;
+
 // Built-in Presets
 const builtInPresets = [
     {
@@ -91,7 +96,6 @@ document.addEventListener('DOMContentLoaded', function() {
     loadCustomData();
     initializeApp();
     attachEventListeners();
-    loadSavedPresets();
 });
 
 function initializeApp() {
@@ -105,14 +109,20 @@ function initializeApp() {
             console.error('Failed to load saved state:', e);
         }
     }
+    
+    // Initialize history with current state
+    history = [JSON.parse(JSON.stringify(modules))];
+    historyIndex = 0;
+    updateUndoRedoButtons();
 }
 
 function attachEventListeners() {
     // Toolbar buttons
+    document.getElementById('undoBtn').addEventListener('click', undo);
+    document.getElementById('redoBtn').addEventListener('click', redo);
     document.getElementById('customModulesBtn').addEventListener('click', () => openCustomModulesModal());
     document.getElementById('presetsBtn').addEventListener('click', () => openPresetModal());
     document.getElementById('savePresetBtn').addEventListener('click', () => openModal('savePresetModal'));
-    document.getElementById('generateBtn').addEventListener('click', generateQuote);
     document.getElementById('clearAllBtn').addEventListener('click', clearAllModules);
     
     // Modal close buttons
@@ -122,6 +132,7 @@ function attachEventListeners() {
     document.getElementById('editOptionsModalCloseBtn').addEventListener('click', () => closeModal('editOptionsModal'));
     document.getElementById('customModulesModalCloseBtn').addEventListener('click', () => closeModal('customModulesModal'));
     document.getElementById('saveCustomModuleModalCloseBtn').addEventListener('click', () => closeModal('saveCustomModuleModal'));
+    document.getElementById('editDimensionPresetsModalCloseBtn').addEventListener('click', () => closeModal('editDimensionPresetsModal'));
     
     // Module type selection
     const moduleCards = document.querySelectorAll('.module-card');
@@ -140,6 +151,13 @@ function attachEventListeners() {
     document.getElementById('addOptionBtn').addEventListener('click', () => addOptionField());
     document.getElementById('saveOptionsBtn').addEventListener('click', saveOptions);
     document.getElementById('cancelOptionsBtn').addEventListener('click', () => closeModal('editOptionsModal'));
+    
+    // Dimension presets modal
+    document.getElementById('addWidthPresetBtn').addEventListener('click', () => addPresetField('widthPresetsList'));
+    document.getElementById('addHeightPresetBtn').addEventListener('click', () => addPresetField('heightPresetsList'));
+    document.getElementById('addDepthPresetBtn').addEventListener('click', () => addPresetField('depthPresetsList'));
+    document.getElementById('saveDimensionPresetsBtn').addEventListener('click', saveDimensionPresets);
+    document.getElementById('cancelDimensionPresetsBtn').addEventListener('click', () => closeModal('editDimensionPresetsModal'));
     
     // Custom module modal
     document.getElementById('confirmSaveCustomModuleBtn').addEventListener('click', saveCustomModule);
@@ -166,8 +184,66 @@ function addModule(type, config = {}) {
         label: config.label || getDefaultLabel(type),
         value: config.value || '',
         placeholder: config.placeholder || '',
-        options: config.options || []
+        options: config.options || [],
+        required: config.required || false
     };
+    
+    // Add default dimension presets based on type
+    if (type === 'door-dimension') {
+        module.widthPresets = config.widthPresets || [
+            "18|closet doors",
+            "24|small interior doors",
+            "28|bathroom doors",
+            "30|standard interior",
+            "32|standard interior",
+            "36|standard exterior/ADA compliant",
+            "42|double doors/wide openings",
+            "48|double doors",
+            "60|patio doors",
+            "72|double doors",
+            "96|wide double doors"
+        ];
+        module.heightPresets = config.heightPresets || [
+            "78|older/custom doors",
+            "80|standard interior",
+            "84|standard exterior",
+            "96|tall doors"
+        ];
+        module.depthPresets = config.depthPresets || [
+            "1.375|hollow core interior",
+            "1.75|solid core interior/standard exterior",
+            "2|heavy exterior/security doors",
+            "2.25|extra heavy exterior"
+        ];
+    } else if (type === 'window-dimension') {
+        module.widthPresets = config.widthPresets || [
+            "24|small window",
+            "30|standard window",
+            "36|standard window",
+            "48|large window",
+            "60|picture window",
+            "72|large picture window",
+            "84|bay window section",
+            "96|wide picture window"
+        ];
+        module.heightPresets = config.heightPresets || [
+            "24|short window",
+            "36|standard window",
+            "48|standard window",
+            "60|tall window",
+            "72|floor to ceiling"
+        ];
+        module.depthPresets = config.depthPresets || [
+            "3.25|standard insulated glass",
+            "4.5|triple pane",
+            "5.5|energy efficient"
+        ];
+    } else if (type === 'dimension') {
+        // Custom dimensions - no presets
+        module.widthPresets = config.widthPresets || [];
+        module.heightPresets = config.heightPresets || [];
+        module.depthPresets = config.depthPresets || [];
+    }
     
     modules.push(module);
     renderModules();
@@ -181,7 +257,9 @@ function getDefaultLabel(type) {
         select: 'Dropdown Selection',
         radio: 'Radio Selection',
         checkbox: 'Checkbox Options',
-        dimension: 'Dimensions',
+        dimension: 'Custom Dimensions',
+        'door-dimension': 'Door Dimensions',
+        'window-dimension': 'Window Dimensions',
         contact: 'Contact Information',
         heading: 'Section Heading',
         title: 'Document Title',
@@ -190,12 +268,19 @@ function getDefaultLabel(type) {
     return labels[type] || 'Field';
 }
 
+function toggleRequired(id) {
+    const module = modules.find(m => m.id === id);
+    if (!module) return;
+    
+    module.required = !module.required;
+    renderModules();
+    saveState();
+}
+
 function deleteModule(id) {
-    if (confirm('Delete this module?')) {
-        modules = modules.filter(m => m.id !== id);
-        renderModules();
-        saveState();
-    }
+    modules = modules.filter(m => m.id !== id);
+    renderModules();
+    saveState();
 }
 
 function editModuleLabel(id) {
@@ -251,6 +336,11 @@ function renderModules() {
     
     // Attach event listeners to module elements
     attachModuleListeners();
+    
+    // Update quote in real-time if output is visible
+    if (!document.getElementById('outputSection').classList.contains('hidden')) {
+        updateQuoteRealTime();
+    }
 }
 
 function createModuleHTML(module, index) {
@@ -333,37 +423,85 @@ function createModuleHTML(module, index) {
             break;
             
         case 'dimension':
+        case 'door-dimension':
+        case 'window-dimension':
             const dims = module.value ? module.value.split('|') : ['', '', ''];
+            const widthPresets = module.widthPresets || [];
+            const heightPresets = module.heightPresets || [];
+            const depthPresets = module.depthPresets || [];
+            
             bodyHTML = `
                 <div class="dimension-grid">
                     <div>
                         <label class="module-label">Width</label>
+                        ${widthPresets.length > 0 ? `
+                            <select class="module-select" 
+                                    data-module-id="${module.id}" 
+                                    data-dimension="width"
+                                    onchange="updateDimensionFromPreset(${module.id}, 'width', this.value)">
+                                <option value="">Custom...</option>
+                                ${widthPresets.map(opt => {
+                                    const value = getDimensionValue(opt);
+                                    return `<option value="${value}" ${dims[0] === value ? 'selected' : ''}>${formatDimensionOption(opt)}</option>`;
+                                }).join('')}
+                            </select>
+                        ` : ''}
                         <input type="text" 
                                class="module-input" 
                                data-module-id="${module.id}" 
                                data-dimension="width"
                                placeholder="e.g., 3' 0&quot;" 
-                               value="${dims[0] || ''}">
+                               value="${dims[0] || ''}"
+                               ${widthPresets.length > 0 ? 'style="margin-top: 8px;"' : ''}>
                     </div>
                     <div>
                         <label class="module-label">Height</label>
+                        ${heightPresets.length > 0 ? `
+                            <select class="module-select" 
+                                    data-module-id="${module.id}" 
+                                    data-dimension="height"
+                                    onchange="updateDimensionFromPreset(${module.id}, 'height', this.value)">
+                                <option value="">Custom...</option>
+                                ${heightPresets.map(opt => {
+                                    const value = getDimensionValue(opt);
+                                    return `<option value="${value}" ${dims[1] === value ? 'selected' : ''}>${formatDimensionOption(opt)}</option>`;
+                                }).join('')}
+                            </select>
+                        ` : ''}
                         <input type="text" 
                                class="module-input" 
                                data-module-id="${module.id}" 
                                data-dimension="height"
                                placeholder="e.g., 6' 8&quot;" 
-                               value="${dims[1] || ''}">
+                               value="${dims[1] || ''}"
+                               ${heightPresets.length > 0 ? 'style="margin-top: 8px;"' : ''}>
                     </div>
                     <div>
                         <label class="module-label">Depth/Thickness</label>
+                        ${depthPresets.length > 0 ? `
+                            <select class="module-select" 
+                                    data-module-id="${module.id}" 
+                                    data-dimension="depth"
+                                    onchange="updateDimensionFromPreset(${module.id}, 'depth', this.value)">
+                                <option value="">Custom...</option>
+                                ${depthPresets.map(opt => {
+                                    const value = getDimensionValue(opt);
+                                    return `<option value="${value}" ${dims[2] === value ? 'selected' : ''}>${formatDimensionOption(opt)}</option>`;
+                                }).join('')}
+                            </select>
+                        ` : ''}
                         <input type="text" 
                                class="module-input" 
                                data-module-id="${module.id}" 
                                data-dimension="depth"
                                placeholder="e.g., 1¾&quot;" 
-                               value="${dims[2] || ''}">
+                               value="${dims[2] || ''}"
+                               ${depthPresets.length > 0 ? 'style="margin-top: 8px;"' : ''}>
                     </div>
                 </div>
+                <button class="btn btn-secondary" style="margin-top: 15px;" onclick="editDimensionPresets(${module.id})">
+                    Edit Dimension Presets
+                </button>
             `;
             break;
             
@@ -435,19 +573,20 @@ function createModuleHTML(module, index) {
     }
     
     return `
-        <div class="module-bubble" data-module-id="${module.id}" draggable="true">
+        <div class="module-bubble ${module.required ? 'module-required' : ''}" data-module-id="${module.id}" draggable="true">
+            <button class="module-btn module-btn-delete" onclick="deleteModule(${module.id})" title="Delete">×</button>
             <div class="module-header">
                 <div class="module-title">
                     <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-                    <span class="icon">${getModuleIcon(module.type)}</span>
+                    ${module.required ? '<span class="required-badge" title="Required field">⚠</span>' : ''}
                     ${module.label}
                 </div>
                 <div class="module-actions">
-                    <button class="module-btn" onclick="openSaveCustomModuleModal(${module.id})" title="Save as Custom">⭐</button>
+                    <button class="module-btn module-btn-required ${module.required ? 'active' : ''}" onclick="toggleRequired(${module.id})" title="${module.required ? 'Mark as optional' : 'Mark as required'}">⚠</button>
+                    <button class="module-btn" onclick="openSaveCustomModuleModal(${module.id})" title="Save as Custom">Save</button>
                     ${canMoveUp ? `<button class="module-btn" onclick="moveModule(${module.id}, 'up')" title="Move Up">▲</button>` : ''}
                     ${canMoveDown ? `<button class="module-btn" onclick="moveModule(${module.id}, 'down')" title="Move Down">▼</button>` : ''}
-                    <button class="module-btn" onclick="editModuleLabel(${module.id})" title="Edit Label">✏️</button>
-                    <button class="module-btn delete" onclick="deleteModule(${module.id})" title="Delete">🗑️</button>
+                    <button class="module-btn" onclick="editModuleLabel(${module.id})" title="Edit Label">Edit</button>
                 </div>
             </div>
             <div class="module-body">
@@ -474,10 +613,43 @@ function getModuleIcon(type) {
 }
 
 function attachModuleListeners() {
-    // Text inputs
-    document.querySelectorAll('.module-input, .module-textarea, .module-select').forEach(input => {
-        input.addEventListener('change', function() {
+    // Text inputs - use 'input' for real-time updates
+    document.querySelectorAll('.module-input, .module-textarea').forEach(input => {
+        input.addEventListener('input', function() {
             updateModuleValue(this);
+            updateQuoteRealTime();
+        });
+    });
+    
+    // Add blur handler for dimension inputs to convert inches to feet-inches
+    document.querySelectorAll('input[data-dimension]').forEach(input => {
+        input.addEventListener('blur', function() {
+            const converted = convertInchesToFeetInches(this.value.trim());
+            if (converted !== this.value.trim()) {
+                this.value = converted;
+                
+                // Update the module value
+                const moduleId = parseInt(this.getAttribute('data-module-id'));
+                const dimensionType = this.getAttribute('data-dimension');
+                const module = modules.find(m => m.id === moduleId);
+                
+                if (module) {
+                    const dims = module.value ? module.value.split('|') : ['', '', ''];
+                    const dimIndex = ['width', 'height', 'depth'].indexOf(dimensionType);
+                    dims[dimIndex] = converted;
+                    module.value = dims.join('|');
+                    saveState();
+                    updateQuoteRealTime();
+                }
+            }
+        });
+    });
+    
+    // Selects - use 'change' since they don't have continuous input
+    document.querySelectorAll('.module-select').forEach(select => {
+        select.addEventListener('change', function() {
+            updateModuleValue(this);
+            updateQuoteRealTime();
         });
     });
     
@@ -485,6 +657,7 @@ function attachModuleListeners() {
     document.querySelectorAll('input[type="radio"]').forEach(radio => {
         radio.addEventListener('change', function() {
             updateModuleValue(this);
+            updateQuoteRealTime();
         });
     });
     
@@ -492,6 +665,7 @@ function attachModuleListeners() {
     document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
         checkbox.addEventListener('change', function() {
             updateModuleCheckboxValue(this);
+            updateQuoteRealTime();
         });
     });
     
@@ -500,12 +674,53 @@ function attachModuleListeners() {
     const container = document.getElementById('modulesContainer');
     
     moduleBubbles.forEach(bubble => {
+        // Re-enable draggable on mouseenter (in case it was disabled)
+        bubble.addEventListener('mouseenter', function() {
+            this.setAttribute('draggable', 'true');
+        });
+        
         bubble.addEventListener('dragstart', handleDragStart);
         bubble.addEventListener('dragend', handleDragEnd);
         bubble.addEventListener('dragover', handleDragOver);
         bubble.addEventListener('drop', handleDrop);
         bubble.addEventListener('dragenter', handleDragEnter);
         bubble.addEventListener('dragleave', handleDragLeave);
+        
+        // Prevent dragging when interacting with form inputs
+        const moduleBody = bubble.querySelector('.module-body');
+        if (moduleBody) {
+            moduleBody.addEventListener('mousedown', function(e) {
+                // Disable draggable when mousedown in module body
+                bubble.setAttribute('draggable', 'false');
+            });
+            
+            moduleBody.addEventListener('mouseup', function(e) {
+                // Re-enable after a short delay
+                setTimeout(() => {
+                    bubble.setAttribute('draggable', 'true');
+                }, 100);
+            });
+        }
+        
+        // Prevent dragging when interacting with form inputs
+        const inputs = bubble.querySelectorAll('input, textarea, select, button');
+        inputs.forEach(input => {
+            input.addEventListener('mousedown', function(e) {
+                e.stopPropagation();
+                bubble.setAttribute('draggable', 'false');
+            });
+            input.addEventListener('mouseup', function(e) {
+                setTimeout(() => {
+                    bubble.setAttribute('draggable', 'true');
+                }, 100);
+            });
+            input.setAttribute('draggable', 'false');
+        });
+        
+        // Make module-body non-draggable
+        if (moduleBody) {
+            moduleBody.setAttribute('draggable', 'false');
+        }
     });
     
     // Also add drop handler to container as fallback
@@ -537,10 +752,37 @@ let draggedModuleId = null;
 let lastDragOverElement = null;
 let dragClone = null;
 let swapInProgress = false;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
 
 function handleDragStart(e) {
+    // Prevent dragging if the target is or is within an input/textarea/select
+    const target = e.target;
+    
+    // Check if drag started from an interactive element
+    if (target.tagName === 'INPUT' || 
+        target.tagName === 'TEXTAREA' || 
+        target.tagName === 'SELECT' ||
+        target.tagName === 'BUTTON') {
+        e.preventDefault();
+        this.setAttribute('draggable', 'false');
+        return false;
+    }
+    
+    // Check if the target is inside module-body
+    if (target.classList.contains('module-body') || target.closest('.module-body')) {
+        e.preventDefault();
+        this.setAttribute('draggable', 'false');
+        return false;
+    }
+    
     draggedElement = this;
     draggedModuleId = parseInt(this.getAttribute('data-module-id'));
+    
+    // Calculate offset from mouse position to element's top-left corner
+    const rect = this.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
     
     // Create a clone that follows the cursor
     dragClone = this.cloneNode(true);
@@ -550,10 +792,9 @@ function handleDragStart(e) {
     dragClone.style.zIndex = '10000';
     dragClone.style.opacity = '0.95';
     dragClone.style.width = this.offsetWidth + 'px';
-    dragClone.style.transform = 'rotate(2deg)';
     dragClone.style.transition = 'none';
-    dragClone.style.left = (e.clientX + 10) + 'px';
-    dragClone.style.top = (e.clientY + 10) + 'px';
+    dragClone.style.left = (e.clientX - dragOffsetX) + 'px';
+    dragClone.style.top = (e.clientY - dragOffsetY) + 'px';
     document.body.appendChild(dragClone);
     
     this.classList.add('dragging');
@@ -573,8 +814,8 @@ function handleDragStart(e) {
 
 function updateClonePosition(e) {
     if (dragClone) {
-        dragClone.style.left = (e.clientX + 10) + 'px';
-        dragClone.style.top = (e.clientY + 10) + 'px';
+        dragClone.style.left = (e.clientX - dragOffsetX) + 'px';
+        dragClone.style.top = (e.clientY - dragOffsetY) + 'px';
     }
 }
 
@@ -895,18 +1136,302 @@ function saveOptions() {
     currentEditingModuleId = null;
 }
 
+// Dimension Helper Functions
+function parseInchesFromValue(value) {
+    if (!value) return null;
+    
+    // Try to parse as pure number first
+    const directNumber = parseFloat(value);
+    if (!isNaN(directNumber) && !value.includes("'") && !value.includes('"') && !value.includes('-')) {
+        return directNumber;
+    }
+    
+    // Parse formats like "3' 0\"" or "3-0" or "36\""
+    let totalInches = 0;
+    
+    // Format: 3' 6" or 3'6"
+    const feetInchMatch = value.match(/([\d.]+)'\s*([\d.]+)?"/i);
+    if (feetInchMatch) {
+        totalInches = parseFloat(feetInchMatch[1]) * 12 + (parseFloat(feetInchMatch[2]) || 0);
+        return totalInches;
+    }
+    
+    // Format: 3-6 (feet-inches)
+    const dashMatch = value.match(/([\d.]+)-([\d.]+)/);
+    if (dashMatch) {
+        totalInches = parseFloat(dashMatch[1]) * 12 + parseFloat(dashMatch[2]);
+        return totalInches;
+    }
+    
+    // Format: 36" (just inches)
+    const inchMatch = value.match(/([\d.]+)"/i);
+    if (inchMatch) {
+        return parseFloat(inchMatch[1]);
+    }
+    
+    return null;
+}
+
+function formatDimensionBoth(value) {
+    const inches = parseInchesFromValue(value);
+    if (inches === null) return value;
+    
+    const feet = Math.floor(inches / 12);
+    const remainingInches = inches % 12;
+    
+    // Format as "36 (3-0)" or "80 (6-8)"
+    if (feet === 0) {
+        // For small values, show decimal inches with fractional conversion
+        return formatDepthWithFraction(inches);
+    } else {
+        const feetInches = remainingInches === 0 ? `${feet}-0` : `${feet}-${remainingInches}`;
+        return `${inches} (${feetInches})`;
+    }
+}
+
+function formatDepthWithFraction(inches) {
+    // Common fractional conversions for door thickness
+    const fractions = {
+        1.375: '1⅜',
+        1.75: '1¾',
+        2: '2',
+        2.25: '2¼',
+        1.5: '1½',
+        1.25: '1¼',
+        0.75: '¾',
+        0.5: '½',
+        0.25: '¼'
+    };
+    
+    // Check if we have a common fraction match (with small tolerance)
+    for (const [decimal, fraction] of Object.entries(fractions)) {
+        if (Math.abs(parseFloat(decimal) - inches) < 0.001) {
+            return `${inches} (${fraction})`;
+        }
+    }
+    
+    // Otherwise just show inches
+    return `${inches}"`;
+}
+
+function formatDimensionOption(presetValue) {
+    // Parse preset value which may be "value" or "value|description"
+    const parts = presetValue.split('|');
+    const value = parts[0];
+    const description = parts[1] || '';
+    
+    const formatted = formatDimensionBoth(value);
+    return description ? `${formatted} - ${description}` : formatted;
+}
+
+function getDimensionValue(presetValue) {
+    // Extract just the numeric value from "value|description" format
+    return presetValue.split('|')[0];
+}
+
+function convertInchesToFeetInches(value) {
+    if (!value) return value;
+    
+    // If already in proper format with feet and inches, don't convert
+    if (value.includes("'") && value.includes('"')) {
+        return value; // Already formatted like "3' 6""
+    }
+    
+    const inches = parseInchesFromValue(value);
+    if (inches === null) return value;
+    
+    const feet = Math.floor(inches / 12);
+    const remainingInches = inches % 12;
+    
+    if (feet === 0) {
+        return remainingInches > 0 ? `${remainingInches}"` : value;
+    } else if (remainingInches === 0) {
+        return `${feet}' 0"`;
+    } else {
+        return `${feet}' ${remainingInches}"`;
+    }
+}
+
+// Dimension Presets Functions
+function updateDimensionFromPreset(moduleId, dimensionType, value) {
+    if (value) {
+        const module = modules.find(m => m.id === moduleId);
+        if (!module) return;
+        
+        const dims = module.value ? module.value.split('|') : ['', '', ''];
+        const dimIndex = ['width', 'height', 'depth'].indexOf(dimensionType);
+        dims[dimIndex] = value;
+        module.value = dims.join('|');
+        
+        // Update the text input to match
+        const input = document.querySelector(`input[data-module-id="${moduleId}"][data-dimension="${dimensionType}"]`);
+        if (input) {
+            input.value = value;
+        }
+        
+        saveState();
+        updateQuoteRealTime();
+    }
+}
+
+function editDimensionPresets(moduleId) {
+    const module = modules.find(m => m.id === moduleId);
+    if (!module) return;
+    
+    currentEditingModuleId = moduleId;
+    
+    // Initialize preset arrays if they don't exist
+    if (!module.widthPresets) module.widthPresets = [];
+    if (!module.heightPresets) module.heightPresets = [];
+    if (!module.depthPresets) module.depthPresets = [];
+    
+    // Populate the presets lists
+    populatePresetList('widthPresetsList', module.widthPresets);
+    populatePresetList('heightPresetsList', module.heightPresets);
+    populatePresetList('depthPresetsList', module.depthPresets);
+    
+    openModal('editDimensionPresetsModal');
+}
+
+function populatePresetList(listId, presets) {
+    const list = document.getElementById(listId);
+    list.innerHTML = '';
+    
+    if (presets.length === 0) {
+        addPresetField(listId);
+    } else {
+        presets.forEach(preset => {
+            addPresetField(listId, preset);
+        });
+    }
+}
+
+function addPresetField(listId, value = '') {
+    const list = document.getElementById(listId);
+    const item = document.createElement('div');
+    item.className = 'option-editor-item';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'option-input';
+    input.value = value;
+    input.placeholder = 'e.g., 2\' 6" or 1¾"';
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'delete-option-btn';
+    deleteBtn.title = 'Delete';
+    deleteBtn.textContent = '×';
+    deleteBtn.addEventListener('click', function() {
+        item.remove();
+    });
+    
+    item.appendChild(input);
+    item.appendChild(deleteBtn);
+    list.appendChild(item);
+    input.focus();
+}
+
+function saveDimensionPresets() {
+    if (currentEditingModuleId === null) return;
+    
+    const module = modules.find(m => m.id === currentEditingModuleId);
+    if (!module) return;
+    
+    // Collect all preset values
+    const widthInputs = document.querySelectorAll('#widthPresetsList .option-input');
+    const heightInputs = document.querySelectorAll('#heightPresetsList .option-input');
+    const depthInputs = document.querySelectorAll('#depthPresetsList .option-input');
+    
+    module.widthPresets = Array.from(widthInputs)
+        .map(input => input.value.trim())
+        .filter(value => value !== '');
+    
+    module.heightPresets = Array.from(heightInputs)
+        .map(input => input.value.trim())
+        .filter(value => value !== '');
+    
+    module.depthPresets = Array.from(depthInputs)
+        .map(input => input.value.trim())
+        .filter(value => value !== '');
+    
+    renderModules();
+    saveState();
+    closeModal('editDimensionPresetsModal');
+    currentEditingModuleId = null;
+}
+
 // Preset Management
+let activePresetTags = [];
+
 function openPresetModal() {
+    activePresetTags = [];
+    renderPresets();
+    openModal('presetModal');
+    
+    // Attach search listener
+    const searchInput = document.getElementById('presetSearch');
+    searchInput.value = '';
+    searchInput.addEventListener('input', function() {
+        renderPresets(this.value.toLowerCase());
+    });
+}
+
+function renderPresets(searchTerm = '') {
     const grid = document.getElementById('presetGrid');
     const allPresets = [...builtInPresets, ...customPresets];
     
-    if (allPresets.length === 0) {
-        grid.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">No presets available</p>';
+    // Collect all unique tags
+    const allTags = new Set();
+    allPresets.forEach(preset => {
+        if (preset.tags && preset.tags.length > 0) {
+            preset.tags.forEach(tag => allTags.add(tag));
+        }
+    });
+    
+    // Render tag filters
+    const tagContainer = document.getElementById('presetTags');
+    if (allTags.size > 0) {
+        tagContainer.innerHTML = Array.from(allTags).sort().map(tag => 
+            `<span class="tag tag-filter ${activePresetTags.includes(tag) ? 'active' : ''}" data-tag="${tag}">${tag}</span>`
+        ).join('');
+        
+        // Attach tag filter listeners
+        document.querySelectorAll('#presetTags .tag-filter').forEach(tagEl => {
+            tagEl.addEventListener('click', function() {
+                const tag = this.getAttribute('data-tag');
+                togglePresetTag(tag);
+            });
+        });
     } else {
-        grid.innerHTML = allPresets.map(preset => createPresetCard(preset)).join('');
+        tagContainer.innerHTML = '';
     }
     
-    openModal('presetModal');
+    // Filter presets
+    let filteredPresets = allPresets;
+    
+    // Filter by search term
+    if (searchTerm) {
+        filteredPresets = filteredPresets.filter(preset => {
+            const nameMatch = preset.name.toLowerCase().includes(searchTerm);
+            const descMatch = preset.description.toLowerCase().includes(searchTerm);
+            const tagMatch = preset.tags && preset.tags.some(tag => tag.toLowerCase().includes(searchTerm));
+            return nameMatch || descMatch || tagMatch;
+        });
+    }
+    
+    // Filter by active tags
+    if (activePresetTags.length > 0) {
+        filteredPresets = filteredPresets.filter(preset => {
+            return preset.tags && activePresetTags.every(activeTag => preset.tags.includes(activeTag));
+        });
+    }
+    
+    if (filteredPresets.length === 0) {
+        grid.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">No presets found</p>';
+    } else {
+        grid.innerHTML = filteredPresets.map(preset => createPresetCard(preset)).join('');
+    }
     
     // Attach preset click listeners
     setTimeout(() => {
@@ -926,7 +1451,19 @@ function openPresetModal() {
                 deletePreset(presetName);
             });
         });
-    }, 100);
+    }, 10);
+}
+
+function togglePresetTag(tag) {
+    const index = activePresetTags.indexOf(tag);
+    if (index > -1) {
+        activePresetTags.splice(index, 1);
+    } else {
+        activePresetTags.push(tag);
+    }
+    
+    const searchTerm = document.getElementById('presetSearch').value.toLowerCase();
+    renderPresets(searchTerm);
 }
 
 function createPresetCard(preset) {
@@ -966,6 +1503,9 @@ function loadPreset(presetName) {
     renderModules();
     saveState();
     closeModal('presetModal');
+    
+    // Trigger real-time quote generation if preset has content
+    updateQuoteRealTime();
 }
 
 function savePreset() {
@@ -1023,16 +1563,24 @@ function deletePreset(presetName) {
     customPresets = customPresets.filter(p => p.name !== presetName);
     localStorage.setItem('customPresets', JSON.stringify(customPresets));
     
-    openPresetModal(); // Refresh the modal
+    const searchTerm = document.getElementById('presetSearch').value.toLowerCase();
+    renderPresets(searchTerm); // Refresh the modal
 }
 
-// Quote Generation
-function generateQuote() {
+// Real-time quote update
+function updateQuoteRealTime() {
     if (modules.length === 0) {
-        alert('Add some modules first!');
+        document.getElementById('outputSection').classList.add('hidden');
         return;
     }
     
+    const quoteText = generateQuoteText();
+    document.getElementById('quoteOutput').textContent = quoteText;
+    document.getElementById('outputSection').classList.remove('hidden');
+}
+
+// Generate quote text (extracted for reuse)
+function generateQuoteText() {
     let quoteText = '';
     
     modules.forEach(module => {
@@ -1053,11 +1601,13 @@ function generateQuote() {
                 break;
                 
             case 'dimension':
+            case 'door-dimension':
+            case 'window-dimension':
                 const dims = module.value.split('|');
                 quoteText += `${module.label}:\n`;
-                if (dims[0]) quoteText += `  Width:     ${dims[0]}\n`;
-                if (dims[1]) quoteText += `  Height:    ${dims[1]}\n`;
-                if (dims[2]) quoteText += `  Depth:     ${dims[2]}\n`;
+                if (dims[0]) quoteText += `  Width:     ${formatDimensionBoth(dims[0])}\n`;
+                if (dims[1]) quoteText += `  Height:    ${formatDimensionBoth(dims[1])}\n`;
+                if (dims[2]) quoteText += `  Depth:     ${formatDimensionBoth(dims[2])}\n`;
                 quoteText += '\n';
                 break;
                 
@@ -1097,12 +1647,51 @@ function generateQuote() {
         }
     });
     
+    return quoteText;
+}
+
+// Quote Generation (manual trigger)
+function generateQuote() {
+    if (modules.length === 0) {
+        alert('Add some modules first!');
+        return;
+    }
+    
+    const quoteText = generateQuoteText();
     document.getElementById('quoteOutput').textContent = quoteText;
     document.getElementById('outputSection').classList.remove('hidden');
     document.getElementById('outputSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function copyToClipboard() {
+    // Check for required fields
+    const emptyRequired = modules.filter(m => {
+        if (!m.required) return false;
+        
+        // Skip heading, title, footer as they might be empty by design
+        if (m.type === 'heading' || m.type === 'title' || m.type === 'footer') return false;
+        
+        // Check if value is empty
+        return !m.value || m.value.trim() === '';
+    });
+    
+    if (emptyRequired.length > 0) {
+        const fieldNames = emptyRequired.map(m => `"${m.label}"`).join(', ');
+        alert(`Please fill out the following required fields before copying:\n\n${fieldNames}`);
+        
+        // Highlight the first empty required field
+        const firstEmptyId = emptyRequired[0].id;
+        const firstEmptyElement = document.querySelector(`[data-module-id="${firstEmptyId}"]`);
+        if (firstEmptyElement) {
+            firstEmptyElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstEmptyElement.classList.add('highlight-required');
+            setTimeout(() => {
+                firstEmptyElement.classList.remove('highlight-required');
+            }, 2000);
+        }
+        return;
+    }
+    
     const quoteText = document.getElementById('quoteOutput').textContent;
     
     navigator.clipboard.writeText(quoteText).then(function() {
@@ -1152,39 +1741,169 @@ function clearAllModules() {
 
 function saveState() {
     localStorage.setItem('quoteBuilderModules', JSON.stringify(modules));
+    
+    // Only add to history if not performing undo/redo
+    if (!isUndoRedoAction) {
+        // Remove any history after current index (user made a new change after undo)
+        history = history.slice(0, historyIndex + 1);
+        
+        // Add current state to history
+        history.push(JSON.parse(JSON.stringify(modules)));
+        
+        // Limit history to 50 states
+        if (history.length > 50) {
+            history.shift();
+        } else {
+            historyIndex++;
+        }
+        
+        updateUndoRedoButtons();
+    }
+}
+
+function updateUndoRedoButtons() {
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    
+    if (undoBtn && redoBtn) {
+        undoBtn.disabled = historyIndex <= 0;
+        redoBtn.disabled = historyIndex >= history.length - 1;
+    }
+}
+
+function undo() {
+    if (historyIndex > 0) {
+        historyIndex--;
+        isUndoRedoAction = true;
+        modules = JSON.parse(JSON.stringify(history[historyIndex]));
+        renderModules();
+        localStorage.setItem('quoteBuilderModules', JSON.stringify(modules));
+        isUndoRedoAction = false;
+        updateUndoRedoButtons();
+    }
+}
+
+function redo() {
+    if (historyIndex < history.length - 1) {
+        historyIndex++;
+        isUndoRedoAction = true;
+        modules = JSON.parse(JSON.stringify(history[historyIndex]));
+        renderModules();
+        localStorage.setItem('quoteBuilderModules', JSON.stringify(modules));
+        isUndoRedoAction = false;
+        updateUndoRedoButtons();
+    }
 }
 
 // Custom Modules Functions
+let activeCustomModuleTags = [];
+
 function openCustomModulesModal() {
+    activeCustomModuleTags = [];
     renderCustomModules();
     openModal('customModulesModal');
+    
+    // Attach search listener
+    const searchInput = document.getElementById('customModuleSearch');
+    searchInput.value = '';
+    searchInput.addEventListener('input', function() {
+        renderCustomModules(this.value.toLowerCase());
+    });
 }
 
-function renderCustomModules() {
+function renderCustomModules(searchTerm = '') {
     const grid = document.getElementById('customModuleGrid');
     
     if (customModules.length === 0) {
+        document.getElementById('customModuleTags').innerHTML = '';
         grid.innerHTML = `
             <div class="empty-state-small">
-                <p>No custom modules saved yet</p>
-                <p class="tip">💡 Click "Save as Custom" on any module to add it here</p>
+                <p>No custom modules saved</p>
+                <p class="tip">Click "Save as Custom" on any module to add it here</p>
             </div>
         `;
         return;
     }
     
-    grid.innerHTML = customModules.map((module, index) => `
-        <div class="custom-module-card" onclick="addCustomModule(${index})">
-            <button class="custom-module-delete" onclick="event.stopPropagation(); deleteCustomModule(${index})" title="Delete">×</button>
-            <h3>${module.name}</h3>
-            <p class="module-type">${getModuleIcon(module.data.type)} ${capitalizeFirst(module.data.type)}</p>
-            ${module.tags && module.tags.length > 0 ? `
-                <div class="tag-container">
-                    ${module.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
-                </div>
-            ` : ''}
-        </div>
-    `).join('');
+    // Collect all unique tags
+    const allTags = new Set();
+    customModules.forEach(module => {
+        if (module.tags && module.tags.length > 0) {
+            module.tags.forEach(tag => allTags.add(tag));
+        }
+    });
+    
+    // Render tag filters
+    const tagContainer = document.getElementById('customModuleTags');
+    if (allTags.size > 0) {
+        tagContainer.innerHTML = Array.from(allTags).sort().map(tag => 
+            `<span class="tag tag-filter ${activeCustomModuleTags.includes(tag) ? 'active' : ''}" data-tag="${tag}">${tag}</span>`
+        ).join('');
+        
+        // Attach tag filter listeners
+        document.querySelectorAll('#customModuleTags .tag-filter').forEach(tagEl => {
+            tagEl.addEventListener('click', function() {
+                const tag = this.getAttribute('data-tag');
+                toggleCustomModuleTag(tag);
+            });
+        });
+    } else {
+        tagContainer.innerHTML = '';
+    }
+    
+    // Filter modules
+    let filteredModules = customModules;
+    
+    // Filter by search term
+    if (searchTerm) {
+        filteredModules = filteredModules.filter((module, index) => {
+            const nameMatch = module.name.toLowerCase().includes(searchTerm);
+            const typeMatch = module.data.type.toLowerCase().includes(searchTerm);
+            const tagMatch = module.tags && module.tags.some(tag => tag.toLowerCase().includes(searchTerm));
+            return nameMatch || typeMatch || tagMatch;
+        });
+    }
+    
+    // Filter by active tags
+    if (activeCustomModuleTags.length > 0) {
+        filteredModules = filteredModules.filter(module => {
+            return module.tags && activeCustomModuleTags.every(activeTag => module.tags.includes(activeTag));
+        });
+    }
+    
+    if (filteredModules.length === 0) {
+        grid.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">No modules found</p>';
+        return;
+    }
+    
+    // Get original indices for the filtered modules
+    grid.innerHTML = filteredModules.map(module => {
+        const originalIndex = customModules.indexOf(module);
+        return `
+            <div class="custom-module-card" onclick="addCustomModule(${originalIndex})">
+                <button class="custom-module-delete" onclick="event.stopPropagation(); deleteCustomModule(${originalIndex})" title="Delete">×</button>
+                <h3>${module.name}</h3>
+                <p class="module-type">${getModuleIcon(module.data.type)} ${capitalizeFirst(module.data.type)}</p>
+                ${module.tags && module.tags.length > 0 ? `
+                    <div class="tag-container">
+                        ${module.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleCustomModuleTag(tag) {
+    const index = activeCustomModuleTags.indexOf(tag);
+    if (index > -1) {
+        activeCustomModuleTags.splice(index, 1);
+    } else {
+        activeCustomModuleTags.push(tag);
+    }
+    
+    const searchTerm = document.getElementById('customModuleSearch').value.toLowerCase();
+    renderCustomModules(searchTerm);
 }
 
 function capitalizeFirst(str) {
@@ -1248,7 +1967,8 @@ function deleteCustomModule(index) {
     if (confirm('Delete this custom module?')) {
         customModules.splice(index, 1);
         localStorage.setItem('customModules', JSON.stringify(customModules));
-        renderCustomModules();
+        const searchTerm = document.getElementById('customModuleSearch').value.toLowerCase();
+        renderCustomModules(searchTerm);
     }
 }
 
@@ -1284,11 +2004,6 @@ function savePreset() {
     localStorage.setItem('customPresets', JSON.stringify(customPresets));
     
     closeModal('savePresetModal');
-    document.getElementById('presetName').value = '';
-    document.getElementById('presetDescription').value = '';
-    document.getElementById('presetTags').value = '';
-    
-    alert(`Preset "${name}" saved successfully!`);
 }
 
 // Make functions globally accessible
@@ -1299,3 +2014,6 @@ window.editOptions = editOptions;
 window.openSaveCustomModuleModal = openSaveCustomModuleModal;
 window.addCustomModule = addCustomModule;
 window.deleteCustomModule = deleteCustomModule;
+window.toggleRequired = toggleRequired;
+window.editDimensionPresets = editDimensionPresets;
+window.updateDimensionFromPreset = updateDimensionFromPreset;
