@@ -686,6 +686,11 @@ function attachModuleListeners() {
         bubble.addEventListener('dragenter', handleDragEnter);
         bubble.addEventListener('dragleave', handleDragLeave);
         
+        // Add touch event support for mobile/tablet
+        bubble.addEventListener('touchstart', handleTouchStart, { passive: false });
+        bubble.addEventListener('touchmove', handleTouchMove, { passive: false });
+        bubble.addEventListener('touchend', handleTouchEnd, { passive: false });
+        
         // Prevent dragging when interacting with form inputs
         const moduleBody = bubble.querySelector('.module-body');
         if (moduleBody) {
@@ -919,6 +924,157 @@ function handleDragEnter(e) {
 
 function handleDragLeave(e) {
     this.classList.remove('drag-over');
+}
+
+// Touch event handlers for mobile/tablet drag and drop
+let touchDragActive = false;
+let touchStartX = 0;
+let touchStartY = 0;
+let touchMoved = false;
+
+function handleTouchStart(e) {
+    const target = e.target;
+    
+    // Prevent dragging if the target is an interactive element
+    if (target.tagName === 'INPUT' || 
+        target.tagName === 'TEXTAREA' || 
+        target.tagName === 'SELECT' ||
+        target.tagName === 'BUTTON') {
+        return;
+    }
+    
+    // Check if the target is inside module-body
+    if (target.classList.contains('module-body') || target.closest('.module-body')) {
+        return;
+    }
+    
+    const touch = e.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    touchMoved = false;
+    
+    draggedElement = this;
+    draggedModuleId = parseInt(this.getAttribute('data-module-id'));
+    
+    // Calculate offset
+    const rect = this.getBoundingClientRect();
+    dragOffsetX = touch.clientX - rect.left;
+    dragOffsetY = touch.clientY - rect.top;
+}
+
+function handleTouchMove(e) {
+    if (!draggedElement) return;
+    
+    const touch = e.touches[0];
+    const moveX = Math.abs(touch.clientX - touchStartX);
+    const moveY = Math.abs(touch.clientY - touchStartY);
+    
+    // Only start dragging if moved more than 10px (prevents accidental drags)
+    if (!touchDragActive && (moveX > 10 || moveY > 10)) {
+        touchDragActive = true;
+        touchMoved = true;
+        e.preventDefault();
+        
+        // Create clone
+        dragClone = draggedElement.cloneNode(true);
+        dragClone.id = 'drag-clone';
+        dragClone.style.position = 'fixed';
+        dragClone.style.pointerEvents = 'none';
+        dragClone.style.zIndex = '10000';
+        dragClone.style.opacity = '0.95';
+        dragClone.style.width = draggedElement.offsetWidth + 'px';
+        dragClone.style.transition = 'none';
+        dragClone.style.left = (touch.clientX - dragOffsetX) + 'px';
+        dragClone.style.top = (touch.clientY - dragOffsetY) + 'px';
+        document.body.appendChild(dragClone);
+        
+        draggedElement.classList.add('dragging');
+    }
+    
+    if (touchDragActive) {
+        e.preventDefault();
+        
+        // Update clone position
+        if (dragClone) {
+            dragClone.style.left = (touch.clientX - dragOffsetX) + 'px';
+            dragClone.style.top = (touch.clientY - dragOffsetY) + 'px';
+        }
+        
+        // Find element under touch
+        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+        const targetBubble = elementBelow?.closest('.module-bubble');
+        
+        // Remove drag-over from all
+        document.querySelectorAll('.module-bubble').forEach(bubble => {
+            bubble.classList.remove('drag-over');
+        });
+        
+        if (targetBubble && targetBubble !== draggedElement) {
+            targetBubble.classList.add('drag-over');
+            
+            // Perform swap if different from last
+            if (lastDragOverElement !== targetBubble && !swapInProgress) {
+                swapInProgress = true;
+                lastDragOverElement = targetBubble;
+                
+                const targetModuleId = parseInt(targetBubble.getAttribute('data-module-id'));
+                const draggedIndex = modules.findIndex(m => m.id === draggedModuleId);
+                const targetIndex = modules.findIndex(m => m.id === targetModuleId);
+                
+                if (draggedIndex !== -1 && targetIndex !== -1 && draggedIndex !== targetIndex) {
+                    // Reorder modules array
+                    const [draggedModule] = modules.splice(draggedIndex, 1);
+                    modules.splice(targetIndex, 0, draggedModule);
+                    
+                    // Update DOM
+                    const container = document.getElementById('modulesContainer');
+                    const allBubbles = Array.from(container.querySelectorAll('.module-bubble'));
+                    const draggedDOMIndex = allBubbles.indexOf(draggedElement);
+                    const targetDOMIndex = allBubbles.indexOf(targetBubble);
+                    
+                    if (draggedDOMIndex < targetDOMIndex) {
+                        targetBubble.parentNode.insertBefore(draggedElement, targetBubble.nextSibling);
+                    } else {
+                        targetBubble.parentNode.insertBefore(draggedElement, targetBubble);
+                    }
+                    
+                    lastDragOverElement = null;
+                    saveState();
+                }
+                
+                setTimeout(() => {
+                    swapInProgress = false;
+                }, 150);
+            }
+        }
+    }
+}
+
+function handleTouchEnd(e) {
+    if (!draggedElement) return;
+    
+    if (touchDragActive) {
+        e.preventDefault();
+    }
+    
+    draggedElement.classList.remove('dragging');
+    
+    // Remove clone
+    if (dragClone) {
+        dragClone.remove();
+        dragClone = null;
+    }
+    
+    // Remove drag-over classes
+    document.querySelectorAll('.module-bubble').forEach(bubble => {
+        bubble.classList.remove('drag-over');
+    });
+    
+    draggedElement = null;
+    draggedModuleId = null;
+    lastDragOverElement = null;
+    touchDragActive = false;
+    swapInProgress = false;
 }
 
 function updateDragPreview(targetElement) {
