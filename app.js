@@ -163,6 +163,19 @@ function attachEventListeners() {
     document.getElementById('confirmSaveCustomModuleBtn').addEventListener('click', saveCustomModule);
     document.getElementById('cancelCustomModuleBtn').addEventListener('click', () => closeModal('saveCustomModuleModal'));
     
+    // Banner settings
+    document.getElementById('bannerSettingsBtn').addEventListener('click', () => openModal('bannerSettingsModal'));
+    document.getElementById('bannerSettingsModalCloseBtn').addEventListener('click', () => closeModal('bannerSettingsModal'));
+    document.getElementById('closeBannerSettingsBtn').addEventListener('click', () => closeModal('bannerSettingsModal'));
+    document.getElementById('bannerImageInput').addEventListener('change', handleBannerImageUpload);
+    document.getElementById('removeBannerBtn').addEventListener('click', removeBannerImage);
+    
+    // Add paste event listener for banner image
+    document.addEventListener('paste', handlePasteImage);
+    
+    // Load saved banner on startup
+    loadBannerImage();
+    
     // Output actions
     // Output actions
     document.getElementById('copyBtn').addEventListener('click', copyToClipboard);
@@ -687,7 +700,7 @@ function attachModuleListeners() {
         bubble.addEventListener('dragleave', handleDragLeave);
         
         // Add touch event support for mobile/tablet
-        bubble.addEventListener('touchstart', handleTouchStart, { passive: false });
+        bubble.addEventListener('touchstart', handleTouchStart, { passive: true });
         bubble.addEventListener('touchmove', handleTouchMove, { passive: false });
         bubble.addEventListener('touchend', handleTouchEnd, { passive: false });
         
@@ -960,6 +973,9 @@ function handleTouchStart(e) {
     const rect = this.getBoundingClientRect();
     dragOffsetX = touch.clientX - rect.left;
     dragOffsetY = touch.clientY - rect.top;
+    
+    // Start a timer to detect long press
+    this.touchStartTime = Date.now();
 }
 
 function handleTouchMove(e) {
@@ -971,8 +987,13 @@ function handleTouchMove(e) {
     
     // Only start dragging if moved more than 10px (prevents accidental drags)
     if (!touchDragActive && (moveX > 10 || moveY > 10)) {
+        // Check if it's been at least 200ms since touch start (helps distinguish drag from scroll)
+        const touchDuration = Date.now() - (draggedElement.touchStartTime || 0);
+        
         touchDragActive = true;
         touchMoved = true;
+        
+        // Prevent scrolling once drag is active
         e.preventDefault();
         
         // Create clone
@@ -989,6 +1010,9 @@ function handleTouchMove(e) {
         document.body.appendChild(dragClone);
         
         draggedElement.classList.add('dragging');
+        
+        // Prevent body scroll while dragging
+        document.body.style.overflow = 'hidden';
     }
     
     if (touchDragActive) {
@@ -1056,6 +1080,9 @@ function handleTouchEnd(e) {
     if (touchDragActive) {
         e.preventDefault();
     }
+    
+    // Re-enable body scroll
+    document.body.style.overflow = '';
     
     draggedElement.classList.remove('dragging');
     
@@ -2160,6 +2187,129 @@ function savePreset() {
     localStorage.setItem('customPresets', JSON.stringify(customPresets));
     
     closeModal('savePresetModal');
+}
+
+// Banner Image Functions
+function handlePasteImage(e) {
+    // Only handle paste when banner settings modal is open
+    const modal = document.getElementById('bannerSettingsModal');
+    if (modal.classList.contains('hidden')) return;
+    
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            e.preventDefault();
+            const blob = items[i].getAsFile();
+            
+            // Validate file size (max 5MB)
+            if (blob.size > 5 * 1024 * 1024) {
+                alert('Image size should be less than 5MB');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const imageData = event.target.result;
+                
+                // Save to localStorage
+                localStorage.setItem('bannerImage', imageData);
+                
+                // Update display
+                displayBannerImage(imageData);
+                
+                // Show preview in modal
+                const preview = document.getElementById('bannerPreview');
+                const previewImg = document.getElementById('bannerPreviewImg');
+                previewImg.src = imageData;
+                preview.classList.remove('hidden');
+            };
+            
+            reader.readAsDataURL(blob);
+            break;
+        }
+    }
+}
+
+function handleBannerImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+    }
+    
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        alert('Image size should be less than 5MB');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const imageData = event.target.result;
+        
+        // Save to localStorage
+        localStorage.setItem('bannerImage', imageData);
+        
+        // Update display
+        displayBannerImage(imageData);
+        
+        // Show preview in modal
+        const preview = document.getElementById('bannerPreview');
+        const previewImg = document.getElementById('bannerPreviewImg');
+        previewImg.src = imageData;
+        preview.classList.remove('hidden');
+    };
+    
+    reader.readAsDataURL(file);
+}
+
+function displayBannerImage(imageData) {
+    const bannerDiv = document.getElementById('bannerImage');
+    bannerDiv.style.backgroundImage = `url(${imageData})`;
+    bannerDiv.classList.remove('hidden');
+    
+    // Add has-banner class to hide title
+    const headerContent = document.querySelector('.header-content');
+    headerContent.classList.add('has-banner');
+}
+
+function loadBannerImage() {
+    const savedBanner = localStorage.getItem('bannerImage');
+    if (savedBanner) {
+        displayBannerImage(savedBanner);
+        
+        // Show preview in modal if modal is open
+        const previewImg = document.getElementById('bannerPreviewImg');
+        if (previewImg) {
+            previewImg.src = savedBanner;
+            document.getElementById('bannerPreview').classList.remove('hidden');
+        }
+    }
+}
+
+function removeBannerImage() {
+    if (confirm('Remove banner image?')) {
+        localStorage.removeItem('bannerImage');
+        
+        const bannerDiv = document.getElementById('bannerImage');
+        bannerDiv.style.backgroundImage = '';
+        bannerDiv.classList.add('hidden');
+        
+        // Remove has-banner class to show title
+        const headerContent = document.querySelector('.header-content');
+        headerContent.classList.remove('has-banner');
+        
+        const preview = document.getElementById('bannerPreview');
+        preview.classList.add('hidden');
+        
+        const input = document.getElementById('bannerImageInput');
+        input.value = '';
+    }
 }
 
 // Make functions globally accessible

@@ -8,9 +8,12 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>Quote Request Builder</h1>
-            <p class="subtitle">Professional quote request management system</p>
+        <header id="appHeader">
+            <div id="bannerImage" class="banner-image hidden"></div>
+            <div class="header-content">
+                <h1>Quote Request Builder</h1>
+                <button type="button" id="bannerSettingsBtn" class="btn-icon" title="Customize banner">⚙</button>
+            </div>
         </header>
 
         <!-- Toolbar -->
@@ -320,6 +323,30 @@
                 <div class="modal-actions">
                     <button type="button" id="cancelDimensionPresetsBtn" class="btn btn-secondary">Cancel</button>
                     <button type="button" id="saveDimensionPresetsBtn" class="btn btn-primary">Save Presets</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Banner Settings Modal -->
+    <div id="bannerSettingsModal" class="modal hidden">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Banner Settings</h2>
+                <button class="modal-close" id="bannerSettingsModalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Banner Image</label>
+                    <input type="file" id="bannerImageInput" accept="image/*" class="text-input">
+                    <span class="form-hint">Upload an image or paste (Ctrl+V/Cmd+V) from clipboard (recommended: 1200x200px)</span>
+                </div>
+                <div id="bannerPreview" class="banner-preview hidden">
+                    <img id="bannerPreviewImg" src="" alt="Banner preview">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="removeBannerBtn" class="btn btn-danger">Remove Banner</button>
+                    <button type="button" id="closeBannerSettingsBtn" class="btn btn-secondary">Close</button>
                 </div>
             </div>
         </div>
